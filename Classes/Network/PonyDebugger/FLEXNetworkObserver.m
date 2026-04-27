@@ -512,6 +512,21 @@ static FIRDocumentReference * _logos_method$_ungrouped$FIRCollectionReference$ad
             free(classes);
         }
 
+        SEL asyncBytesDataSelector = NSSelectorFromString(
+            @"URLSession:dataTask:_didReceiveData:completionHandler:"
+        );
+        numClasses = objc_getClassList(NULL, 0);
+        if (numClasses > 0) {
+            classes = (__unsafe_unretained Class *)malloc(sizeof(Class) * numClasses);
+            numClasses = objc_getClassList(classes, numClasses);
+            for (NSInteger i = 0; i < numClasses; i++) {
+                if (class_getInstanceMethod(classes[i], asyncBytesDataSelector)) {
+                    [self injectAsyncBytesDidReceiveDataIntoDelegateClass:classes[i]];
+                }
+            }
+            free(classes);
+        }
+
         [self injectIntoNSURLConnectionCancel];
         [self injectIntoNSURLSessionTaskResume];
 
@@ -1300,6 +1315,44 @@ static FIRDocumentReference * _logos_method$_ungrouped$FIRCollectionReference$ad
         withMethodDescription:description
         implementationBlock:implementationBlock
         undefinedBlock:undefinedBlock
+    ];
+}
+
++ (void)injectAsyncBytesDidReceiveDataIntoDelegateClass:(Class)cls {
+    SEL selector = NSSelectorFromString(@"URLSession:dataTask:_didReceiveData:completionHandler:");
+    SEL swizzledSelector = [FLEXUtility swizzledSelectorForSelector:selector];
+
+    struct objc_method_description description = { selector, NULL };
+
+    typedef void (^AsyncBytesDidReceiveDataBlock)(
+        id slf,
+        NSURLSession *session,
+        NSURLSessionDataTask *dataTask,
+        NSData *data,
+        void (^completionHandler)(void)
+    );
+
+    AsyncBytesDidReceiveDataBlock sniffingBlock = ^(
+        id slf,
+        NSURLSession *session,
+        NSURLSessionDataTask *dataTask,
+        NSData *data,
+        void (^completionHandler)(void)
+    ) {
+        [FLEXNetworkObserver.sharedObserver URLSession:session
+            dataTask:dataTask didReceiveData:data delegate:slf
+        ];
+        ((void(*)(id, SEL, id, id, id, void(^)(void)))objc_msgSend)(
+            slf, swizzledSelector, session, dataTask, data, completionHandler
+        );
+    };
+
+    [FLEXUtility replaceImplementationOfSelector:selector
+        withSelector:swizzledSelector
+        forClass:cls
+        withMethodDescription:description
+        implementationBlock:sniffingBlock
+        undefinedBlock:sniffingBlock
     ];
 }
 
