@@ -519,10 +519,22 @@ static FIRDocumentReference * _logos_method$_ungrouped$FIRCollectionReference$ad
         if (numClasses > 0) {
             classes = (__unsafe_unretained Class *)malloc(sizeof(Class) * numClasses);
             numClasses = objc_getClassList(classes, numClasses);
-            for (NSInteger i = 0; i < numClasses; i++) {
-                if (class_getInstanceMethod(classes[i], asyncBytesDataSelector)) {
-                    [self injectAsyncBytesDidReceiveDataIntoDelegateClass:classes[i]];
+            for (NSInteger classIndex = 0; classIndex < numClasses; ++classIndex) {
+                Class class = classes[classIndex];
+                
+                if (class == [FLEXNetworkObserver class]) {
+                    continue;
                 }
+
+                unsigned int methodCount = 0;
+                Method *methods = class_copyMethodList(class, &methodCount);
+                for (unsigned int methodIndex = 0; methodIndex < methodCount; methodIndex++) {
+                    if (method_getName(methods[methodIndex]) == asyncBytesDataSelector) {
+                        [self injectAsyncBytesDidReceiveDataIntoDelegateClass:class];
+                        break;
+                    }
+                }
+                free(methods);
             }
             free(classes);
         }
